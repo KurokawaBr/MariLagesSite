@@ -70,6 +70,28 @@ python app.py check        # apenas valida arquivos
 python app.py local --force       # força rebuild
 ```
 
+> 💡 Para deploy no Streamlit, use `streamlit_app.py` como arquivo principal no painel Streamlit.
+> Ele carrega o build estático em `docs/` e renderiza o site diretamente no app Streamlit.
+>
+> Se o `docs/` não existir no repo, gere o build localmente com:
+> ```bash
+> python app.py pages
+> ```
+
+### Deploy no Streamlit
+
+Se você for publicar no Streamlit Cloud, use `streamlit_app.py` como entrypoint.
+Ele já está preparado para renderizar o site estático gerado em `docs/` sem precisar de Node.js no servidor.
+
+Como usar:
+
+```bash
+pip install streamlit
+streamlit run streamlit_app.py
+```
+
+No painel do Streamlit Cloud, configure o arquivo principal como `streamlit_app.py`.
+
 ### Alternativa — somente o React (sem Python)
 
 Se preferir usar o dev server do React com **hot-reload**:
@@ -84,6 +106,7 @@ yarn start            # abre em http://localhost:3000
 
 - **Python 3.8+** (para o `app.py`)
 - **Node.js 18+** + **Yarn 1.x** (para o build do React)
+  - Se o diretório `docs/` já existir com o site estático, `python app.py` pode servir o site sem precisar de Node/Yarn.
 
 ```bash
 # Instalar Yarn caso não tenha

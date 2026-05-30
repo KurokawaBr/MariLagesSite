@@ -121,6 +121,46 @@ git push heroku main
 
 ---
 
+## ☁️ Opção 6 — Streamlit (build estático em `docs/`)
+
+Se você quer publicar o site no Streamlit, o projeto já tem um wrapper dedicado:
+
+- Arquivo principal: `streamlit_app.py`
+- Ele carrega o HTML estático em `docs/index.html`
+- Ele injeta o CSS e o JS estático em linha para renderizar o site dentro do Streamlit
+
+### Como configurar
+
+1. No painel do Streamlit Cloud, escolha o repositório `MariLages`
+2. Aponte o arquivo principal para:
+   - `streamlit_app.py`
+3. Garanta que o diretório `docs/` esteja presente no repositório com o build gerado
+   - Se ainda não existir, gere localmente com:
+     ```bash
+     python app.py pages
+     ```
+4. Faça deploy
+
+### Por que isso funciona
+
+- O Streamlit Cloud roda o app como um app Streamlit,
+- não como um `python app.py` que tenta usar Node/Yarn no servidor.
+- `streamlit_app.py` serve o build já gerado em `docs/`, então não depende de Node no ambiente de deploy.
+
+### Se algo não carregar
+
+- Confirme que `docs/index.html` existe no repositório
+- Confirme que `docs/static/js/...` e `docs/static/css/...` também existem
+- Se for preciso atualizar o site, rode:
+  ```bash
+  python app.py pages
+  git add docs/
+  git commit -m "build: atualiza docs para Streamlit"
+  git push
+  ```
+
+---
+
 ## ⚙️ Como funciona o `app.py serve` na nuvem?
 
 ```

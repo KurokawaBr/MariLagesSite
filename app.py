@@ -39,6 +39,7 @@ import os
 import shutil
 import subprocess
 import sys
+import socket
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 
@@ -50,6 +51,7 @@ ROOT = Path(__file__).resolve().parent
 FRONTEND = ROOT / "frontend"
 BUILD = FRONTEND / "build"
 PAGES_DIR = ROOT / "docs"           # GitHub Pages "Deploy from a branch" suporta /docs
+DOCS_BUILD = PAGES_DIR
 DEFAULT_PORT = 8000
 
 REQUIRED_FILES = [
@@ -132,8 +134,20 @@ def check_node():
         return False
 
 
+def has_docs_build():
+    return DOCS_BUILD.is_dir() and (DOCS_BUILD / "index.html").is_file()
+
+
 def has_build():
-    return BUILD.is_dir() and (BUILD / "index.html").is_file()
+    return (BUILD.is_dir() and (BUILD / "index.html").is_file()) or has_docs_build()
+
+
+def get_build_dir():
+    if BUILD.is_dir() and (BUILD / "index.html").is_file():
+        return BUILD
+    if has_docs_build():
+        return DOCS_BUILD
+    return BUILD
 
 
 def has_node_modules():
@@ -158,9 +172,12 @@ def install_deps():
 
 
 def run_build(force=False):
-    """Garante que exista um build pronto em frontend/build/."""
+    """Garante que exista um build pronto em frontend/build/ ou em docs/."""
     if has_build() and not force:
-        ok("Build ja existe em frontend/build/ (use --force para reconstruir)")
+        if BUILD.is_dir() and (BUILD / "index.html").is_file():
+            ok("Build ja existe em frontend/build/ (use --force para reconstruir)")
+        else:
+            ok("Build ja existe em docs/ (usando site estatico pre-compilado)")
         return True
 
     if not has_node_modules():
@@ -197,9 +214,31 @@ def serve(directory, port, host="0.0.0.0"):
     try:
         srv = HTTPServer((host, port), Handler)
     except OSError as e:
+        # Trata portas já em uso tentando encontrar uma porta livre automaticamente
         err(f"Nao foi possivel iniciar servidor em {host}:{port} - {e}")
-        info("Libere a porta ou use outra com --port")
-        sys.exit(1)
+        # Se for erro de endereço em uso, tenta obter uma porta livre
+        if getattr(e, 'errno', None) in (98,):
+            info("Porta em uso. Tentando encontrar porta livre automaticamente...")
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.bind((host, 0))
+                alt_port = s.getsockname()[1]
+                s.close()
+                try:
+                    srv = HTTPServer((host, alt_port), Handler)
+                    info(f"Usando porta alternativa: {alt_port}")
+                    port = alt_port
+                except OSError as e2:
+                    err(f"Falha ao bindar na porta alternativa {alt_port} - {e2}")
+                    info("Libere a porta ou use outra com --port")
+                    sys.exit(1)
+            except Exception as e3:
+                err(f"Erro ao procurar porta livre: {e3}")
+                info("Libere a porta ou use outra com --port")
+                sys.exit(1)
+        else:
+            info("Libere a porta ou use outra com --port")
+            sys.exit(1)
 
     print()
     ok(f"Servindo {directory.name}/ em http://localhost:{port}")
@@ -220,32 +259,40 @@ def serve(directory, port, host="0.0.0.0"):
 def mode_local(port, force):
     step("MODO LOCAL")
     if not check_files():   sys.exit(1)
-    if not check_node():    sys.exit(1)
+    if not has_build() or force:
+        if not check_node():    sys.exit(1)
     if not run_build(force): sys.exit(1)
-    serve(BUILD, port)
+    serve(get_build_dir(), port)
 
 
 def mode_serve(force):
     step("MODO SERVE (producao)")
     if not check_files():   sys.exit(1)
-    if not check_node():    sys.exit(1)
+    if not has_build() or force:
+        if not check_node():    sys.exit(1)
     if not run_build(force): sys.exit(1)
     port = int(os.environ.get("PORT", DEFAULT_PORT))
-    serve(BUILD, port)
+    serve(get_build_dir(), port)
 
 
 def mode_pages(force):
     step("MODO GITHUB PAGES")
     if not check_files():   sys.exit(1)
-    if not check_node():    sys.exit(1)
+    if not has_build() or force:
+        if not check_node():    sys.exit(1)
     if not run_build(force): sys.exit(1)
+
+    build_dir = get_build_dir()
+    if build_dir == PAGES_DIR:
+        ok(f"Pasta '{PAGES_DIR.name}/' ja esta pronta com o site estatico existente")
+        return
 
     if PAGES_DIR.exists():
         info(f"Limpando pasta existente: {PAGES_DIR.name}/")
         shutil.rmtree(PAGES_DIR)
 
     step(f"Copiando build para {PAGES_DIR.name}/")
-    shutil.copytree(BUILD, PAGES_DIR)
+    shutil.copytree(build_dir, PAGES_DIR)
     (PAGES_DIR / ".nojekyll").touch()
     ok(f"Pasta '{PAGES_DIR.name}/' pronta para GitHub Pages")
 
@@ -263,11 +310,17 @@ def mode_pages(force):
 def mode_check():
     step("MODO CHECK")
     files_ok = check_files()
-    node_ok = check_node()
+    node_ok = True
+    if not has_build():
+        node_ok = check_node()
+    elif has_docs_build() and not (BUILD.is_dir() and (BUILD / "index.html").is_file()):
+        info("Site estatico em docs/ encontrado; Node/Yarn nao sao necessarios para servir esse build.")
 
     print()
-    if has_build():
+    if BUILD.is_dir() and (BUILD / "index.html").is_file():
         ok("Build encontrado em frontend/build/")
+    elif has_docs_build():
+        ok("Build encontrado em docs/ (site estatico existente)")
     else:
         info("Sem build ainda (rode 'python app.py local' para gerar)")
 
