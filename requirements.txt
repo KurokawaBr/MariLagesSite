@@ -1,0 +1,4 @@
+# app.py não tem dependências externas — usa apenas a biblioteca padrão do Python.
+# Este arquivo existe para que plataformas de hospedagem (Railway, Render, Heroku,
+# Fly.io, Cloudflare Pages) reconheçam o projeto como Python e instalem o runtime
+# adequado durante o deploy.
